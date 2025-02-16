@@ -1,10 +1,16 @@
 #Устанавливаем библиотеку telebot (pip3 install pyTelegramBotAPI)
 import telebot
 import csv
+import os 
 from telebot import types
 
 #Создали бот
-token = 'СЮДА'
+#Скрываем токен, используя переменные окружения
+#Ps: через командную строку надо будет вписать команды и токен, так он будет храниться ток у нас на компьютерахь и в сеть мы его не опубликуем
+token = os.environ.get("TELEGRAM_BOT_TOKEN") 
+if not token:
+    print("Ошибка: Не найден токен телеграм-бота в переменных окружения.")
+    exit()
 bot = telebot. TeleBot (token)
 user_registration = {}
 
@@ -58,11 +64,18 @@ def start_message (message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_worker(call):
+    chat_id = call.message.chat.id
+    reg = user_registration[chat_id]
     if call.data == 'yes':
-        reg = user_registration[call.message.chat.id]
         reg.save_to_file()
-        bot.send_message(call.message.chat.id, f'Приятно познакомиться {reg.name} {reg.surname}!')
+        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text=f'Приятно познакомиться {reg.name} {reg.surname}!')
+
+        del user_registration[chat_id]
+        # bot.send_message(call.message.chat.id, f'Приятно познакомиться {reg.name} {reg.surname}!')
     elif call.data == 'no':
-        bot.send_message(call.message.chat.id, 'Жаль :(')
+        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text='Жаль :(')
+
+        # bot.send_message(call.message.chat.id, 'Жаль :(')
+        del user_registration[chat_id]
 
 bot.polling(none_stop=True)
