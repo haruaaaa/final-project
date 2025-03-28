@@ -4,6 +4,9 @@ import os
 from telebot import types
 import datetime
 import time
+import schedule
+import requests
+import threading
 
 # Создали бот
 # Скрываем токен, используя переменные окружения
@@ -13,6 +16,9 @@ if not token:
     exit()
 bot = telebot.TeleBot(token)
 
+# Получаем ключ с сайта NASA
+NASA_API_KEY = 'XIvrocqXsocigfch2H8fHPVnZgSsgy1RnIbPgH8m'
+
 # Создаем словари для хранения данных пользователей и заметок
 user_registration = {}
 
@@ -20,18 +26,11 @@ user_registration = {}
 class Registration:
     def __init__(self):
         self.name = ''
-        self.surname = ''
         self.age = 0
 
     # имя
     def get_name(self, message):
         self.name = message.text
-        bot.send_message(message.chat.id, 'Какая у тебя фамилия?')
-        bot.register_next_step_handler(message, self.get_surname)
-
-    # фамилия
-    def get_surname(self, message):
-        self.surname = message.text
         bot.send_message(message.chat.id, 'Сколько тебе лет?')
         bot.register_next_step_handler(message, self.get_age)
 
@@ -45,7 +44,7 @@ class Registration:
             key_no = types.InlineKeyboardButton(text='Нет', callback_data='no')
             keyboard.add(key_no)
 
-            question = f'Тебе {self.age} лет, тебя зовут {self.name} {self.surname}?'
+            question = f'Тебе {self.age} лет, тебя зовут {self.name}?'
             bot.send_message(message.chat.id, question, reply_markup=keyboard)
         except ValueError:
             bot.send_message(message.chat.id, 'Прошу прощения, я не понимаю, цифрами, пожалуйста.')
@@ -54,7 +53,7 @@ class Registration:
     def save_to_file(self, chat_id):
         with open('users.csv', mode='a', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
-            writer.writerow([chat_id, self.name, self.surname, self.age])
+            writer.writerow([chat_id, self.name, self.age])
 
 # Родительский класс для заметки
 class Note:
@@ -90,6 +89,47 @@ class NoteWithoutDeadline(Note):
             writer.writerow([self.chat_id, self.text, self.note_id])  # Добавляем note_id
 
 REGISTERED_USERS_FILE = 'users.csv'
+# Функция для получения изображения дня с сайта NASA 
+def get_nasa_image():
+
+    #Берем фото дня с сайта NASA
+    url = f'https://api.nasa.gov/planetary/apod?api_key={NASA_API_KEY}'
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        if 'url' in data and data['media_type'] == 'image':
+            return data['url']
+    return None
+
+# Функция для отправки ежедневных уведомлений 
+def send_daily_reminders():
+    try:
+        with open(REGISTERED_USERS_FILE, 'r', newline='', encoding='utf-8') as file:
+            reader = csv.reader(file)
+            for row in reader:
+                chat_id = row[0]
+
+                # Получаем изображение дня от NASA API
+                image_url = get_nasa_image()
+                if image_url:
+
+                    tasks = get_tasks_for_user(chat_id)
+
+                    # Формируем сообщение
+                    task_message = "Не забудь выполнить сегодняшние задачи:\n" + tasks
+
+                    # Отправка ежедневное напоминание
+                    bot.send_photo(int(chat_id), image_url,caption=task_message)
+                else:
+                    # Если не удалось получить изображение, отправляем ошибку
+                    bot.send_message(int(chat_id), "Сегодняшнее изображение недоступно.")
+    except FileNotFoundError:
+        print("Файл с зарегистрированными пользователями не найден.")
+    except Exception as e:
+        print(f"Ошибка при отправке уведомлений: {e}")
+
+# Задаем время для отправки ежедневных уведомлений
+schedule.every().day.at("18:25").do(send_daily_reminders)
 
 # Функция для получения задач пользователя
 def get_tasks_for_user(chat_id):
@@ -345,9 +385,15 @@ def handle_show_notes(message):
         bot.send_message(chat_id, response)
     show_main_menu(chat_id)
 
+# Запуск планировщика
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
-
-# Основной цикл бота
 if __name__ == "__main__":
+    # Запускаем планировщик в отдельном потоке
+    scheduler_thread = threading.Thread(target=run_scheduler)
+    scheduler_thread.start()
     # Запуск
     bot.polling(none_stop=True)
