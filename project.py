@@ -47,7 +47,7 @@ class Registration:
             question = f'Тебе {self.age} лет, тебя зовут {self.name}?'
             bot.send_message(message.chat.id, question, reply_markup=keyboard)
         except ValueError:
-            bot.send_message(message.chat.id, 'Прошу прощения, я не понимаю, цифрами, пожалуйста.')
+            bot.send_message(message.chat.id, f'Прошу прощения, я не понимаю 🥹 \nНапиши, пожалуйста, цифрами.')
             bot.register_next_step_handler(message, self.get_age)
 
     def save_to_file(self, chat_id):
@@ -129,7 +129,7 @@ def send_daily_reminders():
         print(f"Ошибка при отправке уведомлений: {e}")
 
 # Задаем время для отправки ежедневных уведомлений
-schedule.every().day.at("18:25").do(send_daily_reminders)
+schedule.every().day.at("10:00").do(send_daily_reminders)
 
 # Функция для получения задач пользователя
 def get_tasks_for_user(chat_id):
@@ -198,7 +198,7 @@ def delete_note_from_file(chat_id, note_id, filename):
 def start_message(message):
     user_registration[message.chat.id] = Registration()
     bot.send_photo(message.chat.id, open('image.jpeg', 'rb'),
-                   caption='Привет, меня зовут Галина и теперь я твой личный секретарь. Мне ты можешь рассказать о своих планах, установить дедлайны и много чего ещё! Давай для начала познакомимся.')
+                   caption=f'Привет! Я Галочка, твоя персональная выручалочка 🚀 \nМожешь смело доверять мне все свои планы, встречи и задачи, я всё аккуратно разложу по полочкам и не дам тебе ничего забыть! \nРада помочь! Давай познакомимся! ✨')
     bot.send_message(message.chat.id, 'Какое у тебя имя?')
     bot.register_next_step_handler(message, user_registration[message.chat.id].get_name)
 
@@ -258,7 +258,7 @@ def handle_callback_query(call):
     if call.data == 'yes':
         reg = user_registration[chat_id]
         reg.save_to_file(chat_id)
-        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text=f'Приятно познакомиться, {reg.name}!')
+        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text=f'Приятно познакомиться, {reg.name} 🥰')
         show_main_menu(chat_id)
         del user_registration[chat_id]
 
@@ -272,7 +272,7 @@ def handle_callback_query(call):
         
         # Удаляем заметку из файла
         if delete_note_from_file(chat_id, note_id, filename):
-            bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text="Заметка успешно удалена!")
+            bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text="Заметка успешно удалена ✅")
         else:
             bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text="Ошибка: Заметка не найдена.")
         
@@ -324,7 +324,7 @@ def process_note_with_deadline_deadline(message, text):
         datetime.datetime.strptime(deadline, "%Y-%m-%d %H:%M")
         note = NoteWithDeadline(chat_id, text, deadline)
         note.save_to_file()
-        bot.send_message(chat_id, "Заметка с дедлайном успешно сохранена!", reply_markup=types.ReplyKeyboardRemove())
+        bot.send_message(chat_id, "Заметка с дедлайном успешно сохранена ✅", reply_markup=types.ReplyKeyboardRemove())
 
         # Показываем главное меню
         show_main_menu(chat_id)
@@ -340,7 +340,7 @@ def process_note_without_deadline_text(message):
     text = message.text
     note = NoteWithoutDeadline(chat_id, text)
     note.save_to_file()
-    bot.send_message(chat_id, "Заметка без дедлайна успешно сохранена!", reply_markup=types.ReplyKeyboardRemove())
+    bot.send_message(chat_id, "Заметка без дедлайна успешно сохранена ✅", reply_markup=types.ReplyKeyboardRemove())
 
     # Показываем главное меню
     show_main_menu(chat_id)
@@ -351,7 +351,7 @@ def handle_delete_note(message):
     chat_id = message.chat.id
     notes = get_user_notes(chat_id)
     if not notes:
-        bot.send_message(chat_id, "У вас нет заметок для удаления.")
+        bot.send_message(chat_id, f"У вас нет заметок для удаления. Надеюсь, это значит, что вы счастливы 😊")
         show_main_menu(chat_id)
         return
 
@@ -374,7 +374,7 @@ def handle_show_notes(message):
     chat_id = message.chat.id
     notes = get_user_notes(chat_id)
     if not notes:
-        bot.send_message(chat_id, "У вас нет заметок.")
+        bot.send_message(chat_id, "У вас нет заметок. Надеюсь, это значит, что вы счастливы 😊")
     else:
         response = "Ваши заметки:\n"
         for note in notes:
@@ -385,11 +385,50 @@ def handle_show_notes(message):
         bot.send_message(chat_id, response)
     show_main_menu(chat_id)
 
+#Отправляем напоминание за день до дедлайна
+def check_deadlines_and_notify():
+    
+    with open(REGISTERED_USERS_FILE, 'r', newline='', encoding='utf-8') as file:
+            reader = csv.reader(file)
+            for row in reader:
+                chat_id = row[0]
+                notes_reminder = []
+                today = datetime.date.today()
+                tomorrow = today + datetime.timedelta(days=1)
+                
+                # Читаем заметки с дедлайнами
+                with open('notes_dd.csv', 'r', newline='', encoding='utf-8') as file:
+                    reader = csv.reader(file)
+                    for row in reader:
+                        if len(row) >= 4: 
+                            note_chat_id, text, deadline_str, note_id = row[0], row[1], row[2], row[3]
+                            
+                            # Пропускаем заметки других пользователей, если указан chat_id
+                            if chat_id is not None and int(note_chat_id) != int(chat_id):
+                                continue
+                            
+                            try:
+                                # Преобразуем строку даты в объект date (без времени)
+                                deadline_date = datetime.datetime.strptime(deadline_str.split()[0], "%Y-%m-%d").date()
+                                
+                                if deadline_date == tomorrow:
+                                    notes_reminder.append(f"-{text}\n")
+                                if len(notes_reminder)!=0:
+                                    notes_remind = "\n".join(notes_reminder)
+                                    message = f"🔔 Напоминание! Завтра дедлайн по задаче:\n"+ notes_remind
+                                    bot.send_message(int(note_chat_id), message)
+                                
+                            except (ValueError, IndexError):
+                                print(f"Неверный формат даты в заметке {note_id}")
+    
+
+schedule.every().day.at("16:00").do(check_deadlines_and_notify)
+
 # Запуск планировщика
 def run_scheduler():
     while True:
         schedule.run_pending()
-        time.sleep(1)
+        time.sleep(10)
 
 if __name__ == "__main__":
     # Запускаем планировщик в отдельном потоке
